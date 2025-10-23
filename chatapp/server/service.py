@@ -1,15 +1,15 @@
-import asyncio, time, uuid, contextlib
-import grpc
+import asyncio, time, uuid, contextlib, grpc
 from grpc import aio
 from typing import AsyncIterable
 from ..proto import chat_pb2, chat_pb2_grpc
-from .repo import UsersRepo
-from .models import User
+from .repo import UsersRepo, MessagesRepo
+from .models import User, Message
 from .hub import Hub
 
 class ChatService(chat_pb2_grpc.ChatServiceServicer):
-    def __init__(self, users_repo: UsersRepo, hub: Hub):
+    def __init__(self, users_repo: UsersRepo, messages_repo: MessagesRepo, hub: Hub):
         self.users = users_repo
+        self.messages = messages_repo
         self.hub = hub
 
     async def RegisterUser(self, request: chat_pb2.RegisterRequest, context: aio.ServicerContext):
@@ -42,16 +42,45 @@ class ChatService(chat_pb2_grpc.ChatServiceServicer):
 
         async def reader():
             async for incoming in request_iterator:
-                # For now: ACK back to the same user (proves bidi works)
-                ack = chat_pb2.ChatEnvelope(
-                    type=chat_pb2.ACK,
-                    from_user_id="server",
-                    to_user_id=user_id,
-                    message_id=incoming.message_id or uuid.uuid4().hex,
-                    text="ack",
-                    sent_ts=int(time.time() * 1000),
-                )
-                await self.hub.send_to_user(user_id, ack)
+                if incoming.type == chat_pb2.SEND_DM and incoming.to_user_id and incoming.text:
+                    # persist
+                    msg = Message(
+                        message_id=incoming.message_id or uuid.uuid4().hex,
+                        from_user_id=user_id,
+                        to_user_id=incoming.to_user_id,
+                        text=incoming.text,
+                        sent_ts=int(time.time()*1000),
+                    )
+                    # try live delivery
+                    delivered = await self.hub.send_to_user(msg.to_user_id, chat_pb2.ChatEnvelope(
+                        type=chat_pb2.SEND_DM,
+                        from_user_id=msg.from_user_id,
+                        to_user_id=msg.to_user_id,
+                        message_id=msg.message_id,
+                        text=msg.text,
+                        sent_ts=msg.sent_ts,
+                    ))
+                    msg.delivered = bool(delivered)
+                    self.messages.append(msg)
+
+                    # ack back to sender
+                    ack = chat_pb2.ChatEnvelope(
+                        type=chat_pb2.ACK,
+                        from_user_id="server",
+                        to_user_id=user_id,
+                        message_id=msg.message_id,
+                        text="delivered" if delivered else "queued",
+                        sent_ts=int(time.time() * 1000),
+                    )
+                    await self.hub.send_to_user(user_id, ack)
+                else:
+                    # default ACK for unknown event
+                    ack = chat_pb2.ChatEnvelope(
+                        type=chat_pb2.ACK, from_user_id="server", to_user_id=user_id,
+                        message_id=incoming.message_id or uuid.uuid4().hex, text="ack",
+                        sent_ts=int(time.time()*1000)
+                    )
+                    await self.hub.send_to_user(user_id, ack)
 
         reader_task = asyncio.create_task(reader())
         try:
