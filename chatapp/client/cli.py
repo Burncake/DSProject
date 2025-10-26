@@ -12,6 +12,9 @@ async def _run(display_name: str, host: str, port: int, register: bool = False):
     # Variable to store user_id
     user_id = None
 
+    if not display_name:
+        display_name = input("Enter your display name: ").strip()
+
     # Try login first if not registering
     if not register:
         try:
@@ -49,42 +52,6 @@ async def _run(display_name: str, host: str, port: int, register: bool = False):
     if not user_id:
         print("Error: Failed to obtain user ID")
         return
-        if not register:
-            try:
-                login_response = await stub.LoginUser(chat_pb2.LoginRequest(display_name=display_name))
-                if login_response.success:
-                    user_id = login_response.user_id
-                    print(f"Logged in as {display_name} ({user_id})")
-                else:
-                    print(f"Login failed: {login_response.error_message}")
-                    if input("Would you like to register as a new user? (y/n): ").lower() == 'y':
-                        register = True
-                    else:
-                        return
-            except grpc.aio.AioRpcError as e:
-                print(f"Error during login: {e.details()}")
-                if input("Would you like to register as a new user? (y/n): ").lower() == 'y':
-                    register = True
-                else:
-                    return
-
-        # Register if needed
-        if register:
-            try:
-                reg = await stub.RegisterUser(chat_pb2.RegisterRequest(display_name=display_name))
-                user_id = reg.user_id
-                print(f"Registered as {display_name} ({user_id})")
-            except grpc.aio.AioRpcError as e:
-                if e.code() == grpc.StatusCode.ALREADY_EXISTS:
-                    print(f"Error: {e.details()}")
-                    return
-                print(f"Error during registration: {e.details()}")
-                return
-
-        # Check if we have a valid user_id
-        if not user_id:
-            print("Error: Failed to obtain user ID")
-            return
 
     # cache of name -> id to make /dm faster
     name_cache = {}
@@ -217,7 +184,7 @@ async def _run(display_name: str, host: str, port: int, register: bool = False):
 
 @app.command("run")
 def run_cmd(
-    name: str = "alice",
+    name: str = "",
     host: str = "127.0.0.1",
     port: int = 50051,
     register: bool = False
