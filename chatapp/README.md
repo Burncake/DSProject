@@ -39,12 +39,43 @@ python -m chatapp.server.main
 Server sẽ chạy tại địa chỉ: `127.0.0.1:50051`
 
 ### Chạy Client
+
+#### GUI Client (Khuyến nghị)
 ```bash
 cd project1/DSProject
+python -m chatapp.client
+# hoặc
+python -m chatapp.client --mode gui
+```
+
+#### CLI Client (Command Line)
+```bash
+cd project1/DSProject
+python -m chatapp.client --mode cli
+# hoặc
 python -m chatapp.client.cli
 ```
 
-## Sử dụng Client
+## Sử dụng GUI Client
+
+### Đăng nhập/Đăng ký
+1. Nhập tên hiển thị (display name)
+2. Nhập địa chỉ server (mặc định: 127.0.0.1:50051)
+3. Nhấn "Login" để đăng nhập hoặc "Register" để đăng ký mới
+
+### Tìm kiếm và Chat với người dùng
+1. Chuyển sang tab "Users" ở sidebar bên trái
+2. Nhập tên người dùng vào ô tìm kiếm và nhấn "Search"
+3. Chọn người dùng từ danh sách
+4. Gõ tin nhắn và nhấn Enter hoặc "Send"
+
+### Tạo và tham gia nhóm
+1. Chuyển sang tab "Groups" ở sidebar
+2. Nhấn "Create Group" để tạo nhóm mới (tên phải bắt đầu bằng #)
+3. Nhấn "Join Group" để tham gia nhóm có sẵn
+4. Chọn nhóm từ danh sách để bắt đầu chat
+
+## Sử dụng CLI Client
 
 ### Chat 1-1
 1. Đăng ký tài khoản:
