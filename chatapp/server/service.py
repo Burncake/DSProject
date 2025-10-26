@@ -1,10 +1,33 @@
-import asyncio, time, uuid, contextlib, grpc
+import asyncio, time, uuid, contextlib, grpc, logging, os
 from grpc import aio
 from typing import AsyncIterable
 from ..proto import chat_pb2, chat_pb2_grpc
 from .repo import UsersRepo, MessagesRepo, GroupsRepo
 from .models import User, Message, Group
 from .hub import Hub
+
+# Set up logging configuration
+logger = logging.getLogger('chatapp.server')
+logger.setLevel(logging.DEBUG)
+
+# Create formatters and handlers
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+
+# Console handler
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(formatter)
+console_handler.setLevel(logging.INFO)
+
+# File handler - ensure log directory exists
+log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs')
+os.makedirs(log_dir, exist_ok=True)
+file_handler = logging.FileHandler(os.path.join(log_dir, 'server.log'))
+file_handler.setFormatter(formatter)
+file_handler.setLevel(logging.DEBUG)
+
+# Add handlers to logger
+logger.addHandler(console_handler)
+logger.addHandler(file_handler)
 
 class ChatService(chat_pb2_grpc.ChatServiceServicer):
     def __init__(self, users_repo: UsersRepo, messages_repo: MessagesRepo, groups_repo: GroupsRepo, hub: Hub):
@@ -18,11 +41,13 @@ class ChatService(chat_pb2_grpc.ChatServiceServicer):
         # Check if user already exists
         existing_user = self.users.find_by_display_name(request.display_name)
         if existing_user:
+            logger.error(f"RegisterUser: User '{request.display_name}' registration failed (name already exists)")
             await context.abort(grpc.StatusCode.ALREADY_EXISTS, f"User {request.display_name} already exists")
             
         # Create new user
         user_id = uuid.uuid4().hex[:12]
         self.users.append_user(User(id=user_id, display_name=request.display_name))
+        logger.info(f"RegisterUser: User '{request.display_name}' registered successfully with ID '{user_id}'")
         return chat_pb2.RegisterResponse(user_id=user_id)
         
     async def LoginUser(self, request: chat_pb2.LoginRequest, context: aio.ServicerContext):
@@ -53,6 +78,7 @@ class ChatService(chat_pb2_grpc.ChatServiceServicer):
 
         # Validate group name
         if not group_name.startswith("#"):
+            logger.error(f"CreateGroup: Invalid group name format '{group_name}' from user '{creator_id}'")
             return chat_pb2.CreateGroupResponse(
                 success=False,
                 error_message="Group name must start with #"
@@ -66,8 +92,10 @@ class ChatService(chat_pb2_grpc.ChatServiceServicer):
                     creator_id=creator_id,
                     created_ts=int(time.time() * 1000)
                 )
+                logger.info(f"CreateGroup: User '{creator_id}' created group '{group_name}'")
                 return chat_pb2.CreateGroupResponse(success=True)
         except ValueError as e:
+            logger.error(f"CreateGroup: Failed to create group '{group_name}' by user '{creator_id}': {str(e)}")
             return chat_pb2.CreateGroupResponse(
                 success=False,
                 error_message=str(e)
@@ -100,6 +128,21 @@ class ChatService(chat_pb2_grpc.ChatServiceServicer):
                 error_message=str(e)
             )
 
+    async def ListGroups(self, request: chat_pb2.ListGroupsRequest, context: aio.ServicerContext):
+        """Return all groups"""
+        groups = []
+        for g in self.groups.groups_by_name.values():
+            groups.append(chat_pb2.Group(name=g.name, member_ids=list(g.member_ids)))
+        return chat_pb2.ListGroupsResponse(groups=groups)
+
+    async def ListUserGroups(self, request: chat_pb2.ListUserGroupsRequest, context: aio.ServicerContext):
+        """Return groups that the given user is a member of"""
+        user_id = request.user_id
+        groups = []
+        for g in self.groups.get_user_groups(user_id):
+            groups.append(chat_pb2.Group(name=g.name, member_ids=list(g.member_ids)))
+        return chat_pb2.ListUserGroupsResponse(groups=groups)
+
     async def OpenStream(self, request_iterator: AsyncIterable[chat_pb2.ChatEnvelope], context: aio.ServicerContext):
         """
         Protocol: client must send a first SYSTEM message with from_user_id set.
@@ -108,9 +151,10 @@ class ChatService(chat_pb2_grpc.ChatServiceServicer):
         """
         first = await anext(request_iterator)
         if first.type != chat_pb2.SYSTEM or not first.from_user_id:
+            logger.error("ChatStream: Invalid first message - not SYSTEM or missing user_id")
             await context.abort(grpc.StatusCode.UNAUTHENTICATED, "First message must be SYSTEM with from_user_id")
         user_id = first.from_user_id
-        print(f"[SERVICE] New connection from user {user_id}")
+        logger.info(f"ChatStream: User '{user_id}' connected to stream")
 
         # Register user's queue for real-time messages
         q = await self.hub.register_queue(user_id)
@@ -160,6 +204,8 @@ class ChatService(chat_pb2_grpc.ChatServiceServicer):
                         text=incoming.text,
                         sent_ts=current_time,
                     )
+                    logger.debug(f"ChatStream: Received DM from '{user_id}' to '{msg.to_user_id}': {msg.message_id}")
+                    
                     # try live delivery
                     delivered = await self.hub.send_to_user(msg.to_user_id, chat_pb2.ChatEnvelope(
                         type=chat_pb2.SEND_DM,
@@ -171,7 +217,7 @@ class ChatService(chat_pb2_grpc.ChatServiceServicer):
                     ))
                     msg.delivered = bool(delivered)
                     self.messages.append(msg)
-                    print(f"[SERVICE] Message {msg.message_id} to {msg.to_user_id}: {'delivered' if delivered else 'queued'}")
+                    logger.debug(f"ChatStream: Forward DM to '{msg.to_user_id}' status: {'delivered' if delivered else 'queued'}")
 
                     # ack back to sender
                     ack = chat_pb2.ChatEnvelope(
@@ -235,11 +281,14 @@ class ChatService(chat_pb2_grpc.ChatServiceServicer):
                             text=incoming.text,
                             sent_ts=current_time,
                         )
+                        logger.debug(f"ChatStream: Received group message from '{user_id}' to '{group_name}': {msg_id}")
 
                         delivered_count = 0
                         for member_id in group.member_ids:
                             if member_id != user_id:  # Skip sender
-                                if await self.hub.send_to_user(member_id, group_msg):
+                                delivered = await self.hub.send_to_user(member_id, group_msg)
+                                logger.debug(f"ChatStream: Broadcast group message to '{member_id}' status: {'delivered' if delivered else 'queued'}")
+                                if delivered:
                                     delivered_count += 1
                                     msg.delivered_to.add(member_id)
 
@@ -280,6 +329,7 @@ class ChatService(chat_pb2_grpc.ChatServiceServicer):
             with contextlib.suppress(asyncio.CancelledError):
                 await reader_task
             await self.hub.remove_queue(user_id)
+            logger.info(f"ChatStream: User '{user_id}' disconnected from stream")
 
 async def _merge_streams(writer_async_gen, reader_coro):
     # Utility: run a background reader while yielding from writer generator.

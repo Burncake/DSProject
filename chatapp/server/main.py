@@ -1,7 +1,8 @@
 import asyncio
+import os
 from grpc import aio
 from ..proto import chat_pb2_grpc
-from .service import ChatService
+from .service import ChatService, logger  # Reuse the same logger
 from .repo import UsersRepo, MessagesRepo, GroupsRepo
 from .hub import Hub
 
@@ -16,8 +17,9 @@ async def serve(host="127.0.0.1", port=50051):
     )
     listen_addr = f"{host}:{port}"
     server.add_insecure_port(listen_addr)
-    print(f"gRPC server listening on {listen_addr}")
+    logger.info(f"Server starting, listening on {listen_addr}")
     await server.start()
+    logger.info(f"Server is now running on {listen_addr}")
     await server.wait_for_termination()
 
 if __name__ == "__main__":

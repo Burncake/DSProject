@@ -126,6 +126,17 @@ async def _run(display_name: str, host: str, port: int, register: bool = False):
                         print(f"[search] {u.display_name} ({u.id})")
                 continue
 
+            # /list-users - ask server for all users (empty query)
+            if line.strip() == "/list-users":
+                resp = await stub.SearchUsers(chat_pb2.SearchUsersRequest(query=""))
+                if not resp.users:
+                    print("[list-users] No users found")
+                else:
+                    print("[list-users] Users:")
+                    for u in resp.users:
+                        print(f" - {u.display_name} ({u.id})")
+                continue
+
             # /create-group #name
             if line.startswith("/create-group "):
                 group_name = line[len("/create-group "):].strip()
@@ -153,6 +164,24 @@ async def _run(display_name: str, host: str, port: int, register: bool = False):
                     print(f"[group] Joined group {group_name}")
                 else:
                     print(f"[error] Failed to join group: {resp.error_message}")
+                continue
+
+            # /list-groups - list groups the current user is a member of (server-side)
+            if line.strip() == "/list-groups":
+                # Call server RPC ListUserGroups with our user_id
+                try:
+                    resp = await stub.ListUserGroups(chat_pb2.ListUserGroupsRequest(user_id=user_id))
+                except grpc.aio.AioRpcError as e:
+                    print(f"[list-groups] RPC error: {e.details()}")
+                    continue
+
+                if not resp.groups:
+                    print("[list-groups] No groups found")
+                else:
+                    print("[list-groups] Groups:")
+                    for g in resp.groups:
+                        members = ",".join(g.member_ids)
+                        print(f" - {g.name} members={members}")
                 continue
 
             # /dm @name message...

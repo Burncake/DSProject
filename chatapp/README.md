@@ -81,8 +81,8 @@ Ví dụ: `/group_msg #general Hello everyone!`
 
 ### Các lệnh khác
 - `/help` - Hiển thị danh sách các lệnh
-- `/list_users` - Xem danh sách người dùng
-- `/list_groups` - Xem danh sách nhóm bạn tham gia
+- `/list-users` - Xem danh sách người dùng
+- `/list-groups` - Xem danh sách nhóm bạn tham gia
 
 ## Cấu trúc dự án
 ```
