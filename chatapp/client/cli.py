@@ -1,17 +1,57 @@
 import asyncio, time, uuid, re, typer
+import grpc
 from grpc import aio
 from ..proto import chat_pb2, chat_pb2_grpc
 
 app = typer.Typer(help="Simple gRPC chat client (DMs)")
 
-async def _run(display_name: str, host: str, port: int):
+async def _run(display_name: str, host: str, port: int, register: bool = False):
     chan = aio.insecure_channel(f"{host}:{port}")
     stub = chat_pb2_grpc.ChatServiceStub(chan)
 
-    # 1) Register
-    reg = await stub.RegisterUser(chat_pb2.RegisterRequest(display_name=display_name))
-    user_id = reg.user_id
-    print(f"Registered as {display_name} ({user_id})")
+    # Variable to store user_id
+    user_id = None
+
+    if not display_name:
+        display_name = input("Enter your display name: ").strip()
+
+    # Try login first if not registering
+    if not register:
+        try:
+            login_response = await stub.LoginUser(chat_pb2.LoginRequest(display_name=display_name))
+            if login_response.success:
+                user_id = login_response.user_id
+                print(f"Logged in as {display_name} ({user_id})")
+            else:
+                print(f"Login failed: {login_response.error_message}")
+                if input("Would you like to register as a new user? (y/n): ").lower() == 'y':
+                    register = True
+                else:
+                    return
+        except grpc.aio.AioRpcError as e:
+            print(f"Error during login: {e.details()}")
+            if input("Would you like to register as a new user? (y/n): ").lower() == 'y':
+                register = True
+            else:
+                return
+
+    # Register if needed
+    if register:
+        try:
+            reg = await stub.RegisterUser(chat_pb2.RegisterRequest(display_name=display_name))
+            user_id = reg.user_id
+            print(f"Registered as {display_name} ({user_id})")
+        except grpc.aio.AioRpcError as e:
+            if e.code() == grpc.StatusCode.ALREADY_EXISTS:
+                print(f"Error: {e.details()}")
+            else:
+                print(f"Error during registration: {e.details()}")
+            return
+
+    # Check if we have a valid user_id
+    if not user_id:
+        print("Error: Failed to obtain user ID")
+        return
 
     # cache of name -> id to make /dm faster
     name_cache = {}
@@ -53,6 +93,35 @@ async def _run(display_name: str, host: str, port: int):
                         print(f"[search] {u.display_name} ({u.id})")
                 continue
 
+            # /create-group #name
+            if line.startswith("/create-group "):
+                group_name = line[len("/create-group "):].strip()
+                if not group_name.startswith("#"):
+                    print("[error] Group name must start with #")
+                    continue
+                resp = await stub.CreateGroup(chat_pb2.CreateGroupRequest(
+                    group_name=group_name,
+                    creator_user_id=user_id
+                ))
+                if resp.success:
+                    print(f"[group] Created group {group_name}")
+                else:
+                    print(f"[error] Failed to create group: {resp.error_message}")
+                continue
+
+            # /join-group #name
+            if line.startswith("/join-group "):
+                group_name = line[len("/join-group "):].strip()
+                resp = await stub.JoinGroup(chat_pb2.JoinGroupRequest(
+                    group_name=group_name,
+                    user_id=user_id
+                ))
+                if resp.success:
+                    print(f"[group] Joined group {group_name}")
+                else:
+                    print(f"[error] Failed to join group: {resp.error_message}")
+                continue
+
             # /dm @name message...
             m = re.match(r"^/dm\s+@?(\S+)\s+(.+)$", line)
             if m:
@@ -69,10 +138,31 @@ async def _run(display_name: str, host: str, port: int):
                     sent_ts=int(time.time()*1000),
                 )
                 continue
+                
+            # /group #name message...
+            m = re.match(r"^/group\s+#(\S+)\s+(.+)$", line)
+            if m:
+                group_name = "#" + m.group(1)
+                msg_text = m.group(2)
+                yield chat_pb2.ChatEnvelope(
+                    type=chat_pb2.SEND_GROUP,
+                    from_user_id=user_id,
+                    group_id=group_name,
+                    message_id=uuid.uuid4().hex,
+                    text=msg_text,
+                    sent_ts=int(time.time()*1000),
+                )
+                continue
 
             # default: local help
             if line in {"/help", "help"}:
-                print("Commands:\n  /search <query>\n  /dm @<display_name> <message>\n  /help")
+                print("Commands:\n"
+                      "  /search <query>\n"
+                      "  /dm @<display_name> <message>\n"
+                      "  /create-group #<name>\n"
+                      "  /join-group #<name>\n"
+                      "  /group #<name> <message>\n"
+                      "  /help")
                 continue
 
             print('Type "/help" for commands.')
@@ -82,6 +172,8 @@ async def _run(display_name: str, host: str, port: int):
         async for env in call:
             if env.type == chat_pb2.SEND_DM:
                 print(f"[DM] from {env.from_user_id}: {env.text}")
+            elif env.type == chat_pb2.SEND_GROUP:
+                print(f"[GROUP {env.group_id}] {env.from_user_id}: {env.text}")
             elif env.type == chat_pb2.ACK:
                 print(f"[ACK] {env.message_id} {env.text}")
             else:
@@ -91,8 +183,22 @@ async def _run(display_name: str, host: str, port: int):
     await reader(call)
 
 @app.command("run")
-def run_cmd(name: str = "alice", host: str = "127.0.0.1", port: int = 50051):
-    asyncio.run(_run(name, host, port))
+def run_cmd(
+    name: str = "",
+    host: str = "127.0.0.1",
+    port: int = 50051,
+    register: bool = False
+):
+    """
+    Run the chat client.
+    
+    Args:
+        name: Display name to use
+        host: Server hostname
+        port: Server port
+        register: If True, register as new user. If False, try to login first
+    """
+    asyncio.run(_run(name, host, port, register))
 
 if __name__ == "__main__":
     app()

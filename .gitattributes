@@ -1,0 +1,18 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Python files should use LF
+*.py text eol=lf
+
+# Protocol Buffers files should use LF
+*.proto text eol=lf
+
+# Generated Protocol Buffers files should use LF
+*_pb2.py text eol=lf
+*_pb2_grpc.py text eol=lf
+
+# Explicitly declare text files to be normalized
+*.txt text
+*.md text
+*.json text
+*.jsonl text
