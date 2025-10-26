@@ -41,6 +41,25 @@ message JoinGroupResponse {
     string error_message = 2;
 }
 
+message GetMessagesRequest {
+    string user_id = 1;
+    string chat_id = 2;  // user_id for DM or group_name for group
+    bool is_group = 3;
+    int32 limit = 4;  // optional limit (default 50)
+}
+
+message GetMessagesResponse {
+    repeated ChatEnvelope messages = 1;
+}
+
+message GetUserGroupsRequest {
+    string user_id = 1;
+}
+
+message GetUserGroupsResponse {
+    repeated Group groups = 1;
+}
+
 // --- Chat stream (bidi) ---
 enum EventType { UNKNOWN = 0; SEND_DM = 1; SEND_GROUP = 2; SYSTEM = 3; ACK = 4; }
 
@@ -60,5 +79,7 @@ service ChatService {
   rpc SearchUsers(SearchUsersRequest) returns (SearchUsersResponse);
   rpc CreateGroup(CreateGroupRequest) returns (CreateGroupResponse);
   rpc JoinGroup(JoinGroupRequest) returns (JoinGroupResponse);
+  rpc GetMessages(GetMessagesRequest) returns (GetMessagesResponse);
+  rpc GetUserGroups(GetUserGroupsRequest) returns (GetUserGroupsResponse);
   rpc OpenStream(stream ChatEnvelope) returns (stream ChatEnvelope);
 }
