@@ -125,6 +125,27 @@ class MessagesRepo:
             f.flush()
             os.fsync(f.fileno())
 
+    def get_conversation_messages(self, user_id: str, chat_id: str, is_group: bool, limit: int = 50) -> list[Message]:
+        """Get message history for a conversation"""
+        messages = []
+        
+        if is_group:
+            # Get all messages for this group
+            for msg in self._messages:
+                if msg.is_group_message and msg.to_user_id == chat_id:
+                    messages.append(msg)
+        else:
+            # Get DM messages between user_id and chat_id
+            for msg in self._messages:
+                if not msg.is_group_message:
+                    if (msg.from_user_id == user_id and msg.to_user_id == chat_id) or \
+                       (msg.from_user_id == chat_id and msg.to_user_id == user_id):
+                        messages.append(msg)
+        
+        # Sort by timestamp and limit
+        messages.sort(key=lambda m: m.sent_ts)
+        return messages[-limit:] if limit > 0 else messages
+
 class GroupsRepo:
     def __init__(self, path: str):
         os.makedirs(os.path.dirname(path), exist_ok=True)
