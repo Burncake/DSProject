@@ -85,10 +85,10 @@ service ChatService {
   rpc SearchUsers(SearchUsersRequest) returns (SearchUsersResponse);
   rpc CreateGroup(CreateGroupRequest) returns (CreateGroupResponse);
   rpc JoinGroup(JoinGroupRequest) returns (JoinGroupResponse);
-    // List all groups
-    rpc ListGroups(ListGroupsRequest) returns (ListGroupsResponse);
-    // List groups for a specific user
-    rpc ListUserGroups(ListUserGroupsRequest) returns (ListUserGroupsResponse);
+  // List all groups
+  rpc ListGroups(ListGroupsRequest) returns (ListGroupsResponse);
+  // List groups for a specific user
+  rpc ListUserGroups(ListUserGroupsRequest) returns (ListUserGroupsResponse);
   rpc GetMessages(GetMessagesRequest) returns (GetMessagesResponse);
   rpc GetUserGroups(GetUserGroupsRequest) returns (GetUserGroupsResponse);
   rpc OpenStream(stream ChatEnvelope) returns (stream ChatEnvelope);
