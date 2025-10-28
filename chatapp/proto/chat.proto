@@ -21,6 +21,12 @@ message LoginResponse {
 message SearchUsersRequest { string query = 1; }
 message SearchUsersResponse { repeated User users = 1; }
 
+message ListGroupsRequest {}
+message ListGroupsResponse { repeated Group groups = 1; }
+
+message ListUserGroupsRequest { string user_id = 1; }
+message ListUserGroupsResponse { repeated Group groups = 1; }
+
 message CreateGroupRequest {
     string group_name = 1;
     string creator_user_id = 2;
@@ -79,6 +85,10 @@ service ChatService {
   rpc SearchUsers(SearchUsersRequest) returns (SearchUsersResponse);
   rpc CreateGroup(CreateGroupRequest) returns (CreateGroupResponse);
   rpc JoinGroup(JoinGroupRequest) returns (JoinGroupResponse);
+  // List all groups
+  rpc ListGroups(ListGroupsRequest) returns (ListGroupsResponse);
+  // List groups for a specific user
+  rpc ListUserGroups(ListUserGroupsRequest) returns (ListUserGroupsResponse);
   rpc GetMessages(GetMessagesRequest) returns (GetMessagesResponse);
   rpc GetUserGroups(GetUserGroupsRequest) returns (GetUserGroupsResponse);
   rpc OpenStream(stream ChatEnvelope) returns (stream ChatEnvelope);

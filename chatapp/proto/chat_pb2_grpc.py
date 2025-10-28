@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from chatapp.proto import chat_pb2 as chatapp_dot_proto_dot_chat__pb2
+from . import chat_pb2 as chat__pb2
 
 GRPC_GENERATED_VERSION = '1.76.0'
 GRPC_VERSION = grpc.__version__
@@ -18,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in chatapp/proto/chat_pb2_grpc.py depends on'
+        + ' but the generated code in chat_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -36,43 +36,53 @@ class ChatServiceStub(object):
         """
         self.RegisterUser = channel.unary_unary(
                 '/chat.ChatService/RegisterUser',
-                request_serializer=chatapp_dot_proto_dot_chat__pb2.RegisterRequest.SerializeToString,
-                response_deserializer=chatapp_dot_proto_dot_chat__pb2.RegisterResponse.FromString,
+                request_serializer=chat__pb2.RegisterRequest.SerializeToString,
+                response_deserializer=chat__pb2.RegisterResponse.FromString,
                 _registered_method=True)
         self.LoginUser = channel.unary_unary(
                 '/chat.ChatService/LoginUser',
-                request_serializer=chatapp_dot_proto_dot_chat__pb2.LoginRequest.SerializeToString,
-                response_deserializer=chatapp_dot_proto_dot_chat__pb2.LoginResponse.FromString,
+                request_serializer=chat__pb2.LoginRequest.SerializeToString,
+                response_deserializer=chat__pb2.LoginResponse.FromString,
                 _registered_method=True)
         self.SearchUsers = channel.unary_unary(
                 '/chat.ChatService/SearchUsers',
-                request_serializer=chatapp_dot_proto_dot_chat__pb2.SearchUsersRequest.SerializeToString,
-                response_deserializer=chatapp_dot_proto_dot_chat__pb2.SearchUsersResponse.FromString,
+                request_serializer=chat__pb2.SearchUsersRequest.SerializeToString,
+                response_deserializer=chat__pb2.SearchUsersResponse.FromString,
                 _registered_method=True)
         self.CreateGroup = channel.unary_unary(
                 '/chat.ChatService/CreateGroup',
-                request_serializer=chatapp_dot_proto_dot_chat__pb2.CreateGroupRequest.SerializeToString,
-                response_deserializer=chatapp_dot_proto_dot_chat__pb2.CreateGroupResponse.FromString,
+                request_serializer=chat__pb2.CreateGroupRequest.SerializeToString,
+                response_deserializer=chat__pb2.CreateGroupResponse.FromString,
                 _registered_method=True)
         self.JoinGroup = channel.unary_unary(
                 '/chat.ChatService/JoinGroup',
-                request_serializer=chatapp_dot_proto_dot_chat__pb2.JoinGroupRequest.SerializeToString,
-                response_deserializer=chatapp_dot_proto_dot_chat__pb2.JoinGroupResponse.FromString,
+                request_serializer=chat__pb2.JoinGroupRequest.SerializeToString,
+                response_deserializer=chat__pb2.JoinGroupResponse.FromString,
+                _registered_method=True)
+        self.ListGroups = channel.unary_unary(
+                '/chat.ChatService/ListGroups',
+                request_serializer=chat__pb2.ListGroupsRequest.SerializeToString,
+                response_deserializer=chat__pb2.ListGroupsResponse.FromString,
+                _registered_method=True)
+        self.ListUserGroups = channel.unary_unary(
+                '/chat.ChatService/ListUserGroups',
+                request_serializer=chat__pb2.ListUserGroupsRequest.SerializeToString,
+                response_deserializer=chat__pb2.ListUserGroupsResponse.FromString,
                 _registered_method=True)
         self.GetMessages = channel.unary_unary(
                 '/chat.ChatService/GetMessages',
-                request_serializer=chatapp_dot_proto_dot_chat__pb2.GetMessagesRequest.SerializeToString,
-                response_deserializer=chatapp_dot_proto_dot_chat__pb2.GetMessagesResponse.FromString,
+                request_serializer=chat__pb2.GetMessagesRequest.SerializeToString,
+                response_deserializer=chat__pb2.GetMessagesResponse.FromString,
                 _registered_method=True)
         self.GetUserGroups = channel.unary_unary(
                 '/chat.ChatService/GetUserGroups',
-                request_serializer=chatapp_dot_proto_dot_chat__pb2.GetUserGroupsRequest.SerializeToString,
-                response_deserializer=chatapp_dot_proto_dot_chat__pb2.GetUserGroupsResponse.FromString,
+                request_serializer=chat__pb2.GetUserGroupsRequest.SerializeToString,
+                response_deserializer=chat__pb2.GetUserGroupsResponse.FromString,
                 _registered_method=True)
         self.OpenStream = channel.stream_stream(
                 '/chat.ChatService/OpenStream',
-                request_serializer=chatapp_dot_proto_dot_chat__pb2.ChatEnvelope.SerializeToString,
-                response_deserializer=chatapp_dot_proto_dot_chat__pb2.ChatEnvelope.FromString,
+                request_serializer=chat__pb2.ChatEnvelope.SerializeToString,
+                response_deserializer=chat__pb2.ChatEnvelope.FromString,
                 _registered_method=True)
 
 
@@ -109,6 +119,20 @@ class ChatServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListGroups(self, request, context):
+        """List all groups
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListUserGroups(self, request, context):
+        """List groups for a specific user
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def GetMessages(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -132,43 +156,53 @@ def add_ChatServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'RegisterUser': grpc.unary_unary_rpc_method_handler(
                     servicer.RegisterUser,
-                    request_deserializer=chatapp_dot_proto_dot_chat__pb2.RegisterRequest.FromString,
-                    response_serializer=chatapp_dot_proto_dot_chat__pb2.RegisterResponse.SerializeToString,
+                    request_deserializer=chat__pb2.RegisterRequest.FromString,
+                    response_serializer=chat__pb2.RegisterResponse.SerializeToString,
             ),
             'LoginUser': grpc.unary_unary_rpc_method_handler(
                     servicer.LoginUser,
-                    request_deserializer=chatapp_dot_proto_dot_chat__pb2.LoginRequest.FromString,
-                    response_serializer=chatapp_dot_proto_dot_chat__pb2.LoginResponse.SerializeToString,
+                    request_deserializer=chat__pb2.LoginRequest.FromString,
+                    response_serializer=chat__pb2.LoginResponse.SerializeToString,
             ),
             'SearchUsers': grpc.unary_unary_rpc_method_handler(
                     servicer.SearchUsers,
-                    request_deserializer=chatapp_dot_proto_dot_chat__pb2.SearchUsersRequest.FromString,
-                    response_serializer=chatapp_dot_proto_dot_chat__pb2.SearchUsersResponse.SerializeToString,
+                    request_deserializer=chat__pb2.SearchUsersRequest.FromString,
+                    response_serializer=chat__pb2.SearchUsersResponse.SerializeToString,
             ),
             'CreateGroup': grpc.unary_unary_rpc_method_handler(
                     servicer.CreateGroup,
-                    request_deserializer=chatapp_dot_proto_dot_chat__pb2.CreateGroupRequest.FromString,
-                    response_serializer=chatapp_dot_proto_dot_chat__pb2.CreateGroupResponse.SerializeToString,
+                    request_deserializer=chat__pb2.CreateGroupRequest.FromString,
+                    response_serializer=chat__pb2.CreateGroupResponse.SerializeToString,
             ),
             'JoinGroup': grpc.unary_unary_rpc_method_handler(
                     servicer.JoinGroup,
-                    request_deserializer=chatapp_dot_proto_dot_chat__pb2.JoinGroupRequest.FromString,
-                    response_serializer=chatapp_dot_proto_dot_chat__pb2.JoinGroupResponse.SerializeToString,
+                    request_deserializer=chat__pb2.JoinGroupRequest.FromString,
+                    response_serializer=chat__pb2.JoinGroupResponse.SerializeToString,
+            ),
+            'ListGroups': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListGroups,
+                    request_deserializer=chat__pb2.ListGroupsRequest.FromString,
+                    response_serializer=chat__pb2.ListGroupsResponse.SerializeToString,
+            ),
+            'ListUserGroups': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListUserGroups,
+                    request_deserializer=chat__pb2.ListUserGroupsRequest.FromString,
+                    response_serializer=chat__pb2.ListUserGroupsResponse.SerializeToString,
             ),
             'GetMessages': grpc.unary_unary_rpc_method_handler(
                     servicer.GetMessages,
-                    request_deserializer=chatapp_dot_proto_dot_chat__pb2.GetMessagesRequest.FromString,
-                    response_serializer=chatapp_dot_proto_dot_chat__pb2.GetMessagesResponse.SerializeToString,
+                    request_deserializer=chat__pb2.GetMessagesRequest.FromString,
+                    response_serializer=chat__pb2.GetMessagesResponse.SerializeToString,
             ),
             'GetUserGroups': grpc.unary_unary_rpc_method_handler(
                     servicer.GetUserGroups,
-                    request_deserializer=chatapp_dot_proto_dot_chat__pb2.GetUserGroupsRequest.FromString,
-                    response_serializer=chatapp_dot_proto_dot_chat__pb2.GetUserGroupsResponse.SerializeToString,
+                    request_deserializer=chat__pb2.GetUserGroupsRequest.FromString,
+                    response_serializer=chat__pb2.GetUserGroupsResponse.SerializeToString,
             ),
             'OpenStream': grpc.stream_stream_rpc_method_handler(
                     servicer.OpenStream,
-                    request_deserializer=chatapp_dot_proto_dot_chat__pb2.ChatEnvelope.FromString,
-                    response_serializer=chatapp_dot_proto_dot_chat__pb2.ChatEnvelope.SerializeToString,
+                    request_deserializer=chat__pb2.ChatEnvelope.FromString,
+                    response_serializer=chat__pb2.ChatEnvelope.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -196,8 +230,8 @@ class ChatService(object):
             request,
             target,
             '/chat.ChatService/RegisterUser',
-            chatapp_dot_proto_dot_chat__pb2.RegisterRequest.SerializeToString,
-            chatapp_dot_proto_dot_chat__pb2.RegisterResponse.FromString,
+            chat__pb2.RegisterRequest.SerializeToString,
+            chat__pb2.RegisterResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -223,8 +257,8 @@ class ChatService(object):
             request,
             target,
             '/chat.ChatService/LoginUser',
-            chatapp_dot_proto_dot_chat__pb2.LoginRequest.SerializeToString,
-            chatapp_dot_proto_dot_chat__pb2.LoginResponse.FromString,
+            chat__pb2.LoginRequest.SerializeToString,
+            chat__pb2.LoginResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -250,8 +284,8 @@ class ChatService(object):
             request,
             target,
             '/chat.ChatService/SearchUsers',
-            chatapp_dot_proto_dot_chat__pb2.SearchUsersRequest.SerializeToString,
-            chatapp_dot_proto_dot_chat__pb2.SearchUsersResponse.FromString,
+            chat__pb2.SearchUsersRequest.SerializeToString,
+            chat__pb2.SearchUsersResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -277,8 +311,8 @@ class ChatService(object):
             request,
             target,
             '/chat.ChatService/CreateGroup',
-            chatapp_dot_proto_dot_chat__pb2.CreateGroupRequest.SerializeToString,
-            chatapp_dot_proto_dot_chat__pb2.CreateGroupResponse.FromString,
+            chat__pb2.CreateGroupRequest.SerializeToString,
+            chat__pb2.CreateGroupResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -304,8 +338,62 @@ class ChatService(object):
             request,
             target,
             '/chat.ChatService/JoinGroup',
-            chatapp_dot_proto_dot_chat__pb2.JoinGroupRequest.SerializeToString,
-            chatapp_dot_proto_dot_chat__pb2.JoinGroupResponse.FromString,
+            chat__pb2.JoinGroupRequest.SerializeToString,
+            chat__pb2.JoinGroupResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListGroups(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/chat.ChatService/ListGroups',
+            chat__pb2.ListGroupsRequest.SerializeToString,
+            chat__pb2.ListGroupsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListUserGroups(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/chat.ChatService/ListUserGroups',
+            chat__pb2.ListUserGroupsRequest.SerializeToString,
+            chat__pb2.ListUserGroupsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -331,8 +419,8 @@ class ChatService(object):
             request,
             target,
             '/chat.ChatService/GetMessages',
-            chatapp_dot_proto_dot_chat__pb2.GetMessagesRequest.SerializeToString,
-            chatapp_dot_proto_dot_chat__pb2.GetMessagesResponse.FromString,
+            chat__pb2.GetMessagesRequest.SerializeToString,
+            chat__pb2.GetMessagesResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -358,8 +446,8 @@ class ChatService(object):
             request,
             target,
             '/chat.ChatService/GetUserGroups',
-            chatapp_dot_proto_dot_chat__pb2.GetUserGroupsRequest.SerializeToString,
-            chatapp_dot_proto_dot_chat__pb2.GetUserGroupsResponse.FromString,
+            chat__pb2.GetUserGroupsRequest.SerializeToString,
+            chat__pb2.GetUserGroupsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -385,8 +473,8 @@ class ChatService(object):
             request_iterator,
             target,
             '/chat.ChatService/OpenStream',
-            chatapp_dot_proto_dot_chat__pb2.ChatEnvelope.SerializeToString,
-            chatapp_dot_proto_dot_chat__pb2.ChatEnvelope.FromString,
+            chat__pb2.ChatEnvelope.SerializeToString,
+            chat__pb2.ChatEnvelope.FromString,
             options,
             channel_credentials,
             insecure,
