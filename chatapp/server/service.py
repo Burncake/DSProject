@@ -142,58 +142,6 @@ class ChatService(chat_pb2_grpc.ChatServiceServicer):
         for g in self.groups.get_user_groups(user_id):
             groups.append(chat_pb2.Group(name=g.name, member_ids=list(g.member_ids)))
         return chat_pb2.ListUserGroupsResponse(groups=groups)
-    async def GetMessages(self, request: chat_pb2.GetMessagesRequest, context: aio.ServicerContext):
-        """Get message history for a conversation"""
-        user_id = request.user_id
-        chat_id = request.chat_id
-        is_group = request.is_group
-        limit = request.limit if request.limit > 0 else 50
-        
-        # Get messages from repository
-        messages = self.messages.get_conversation_messages(user_id, chat_id, is_group, limit)
-        
-        # Convert to ChatEnvelope protobuf messages
-        envelopes = []
-        for msg in messages:
-            if msg.is_group_message:
-                envelope = chat_pb2.ChatEnvelope(
-                    type=chat_pb2.SEND_GROUP,
-                    from_user_id=msg.from_user_id,
-                    group_id=msg.to_user_id,
-                    message_id=msg.message_id,
-                    text=msg.text,
-                    sent_ts=msg.sent_ts
-                )
-            else:
-                envelope = chat_pb2.ChatEnvelope(
-                    type=chat_pb2.SEND_DM,
-                    from_user_id=msg.from_user_id,
-                    to_user_id=msg.to_user_id,
-                    message_id=msg.message_id,
-                    text=msg.text,
-                    sent_ts=msg.sent_ts
-                )
-            envelopes.append(envelope)
-        
-        return chat_pb2.GetMessagesResponse(messages=envelopes)
-
-    async def GetUserGroups(self, request: chat_pb2.GetUserGroupsRequest, context: aio.ServicerContext):
-        """Get all groups that the user is a member of"""
-        user_id = request.user_id
-        
-        # Get user's groups from repository
-        user_groups = self.groups.get_user_groups(user_id)
-        
-        # Convert to protobuf Group messages
-        groups = []
-        for group in user_groups:
-            pb_group = chat_pb2.Group(
-                name=group.name,
-                member_ids=list(group.member_ids)
-            )
-            groups.append(pb_group)
-        
-        return chat_pb2.GetUserGroupsResponse(groups=groups)
 
     async def OpenStream(self, request_iterator: AsyncIterable[chat_pb2.ChatEnvelope], context: aio.ServicerContext):
         """
@@ -212,14 +160,12 @@ class ChatService(chat_pb2_grpc.ChatServiceServicer):
         q = await self.hub.register_queue(user_id)
 
         # Send any undelivered messages that were queued while user was offline
-        undelivered = self.messages.get_undelivered_messages(user_id)
+        undelivered = self.messages.get_undelivered_messages(user_id, self.groups)
         if undelivered:
-            print(f"[SERVICE] Found {len(undelivered)} undelivered messages for {user_id}")
+            logger.info(f"Found {len(undelivered)} undelivered messages for {user_id}")
             for msg in undelivered:
-                # Check if it's a group message and if user is still a member
+                # Group membership is already checked in get_undelivered_messages
                 if msg.is_group_message:
-                    if not self.groups.is_member(msg.to_user_id, user_id):
-                        continue  # Skip if user is no longer in the group
                     envelope = chat_pb2.ChatEnvelope(
                         type=chat_pb2.SEND_GROUP,
                         from_user_id=msg.from_user_id,

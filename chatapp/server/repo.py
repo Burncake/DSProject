@@ -1,6 +1,9 @@
 import json, os
 from typing import Dict, Optional, Iterable, Set
 from .models import User, Message, Group
+from ..utils.logger import setup_logger
+
+logger = setup_logger('chatapp.repo')
 
 class UsersRepo:
     def __init__(self, path: str):
@@ -22,6 +25,7 @@ class UsersRepo:
         with open(self.path, "a", encoding="utf-8") as f:
             f.write(line + "\n"); f.flush(); os.fsync(f.fileno())
         self.users_by_id[user.id] = user
+        logger.info(f"New user registered: {user.display_name} (ID: {user.id})")
 
     def get(self, user_id: str) -> Optional[User]:
         return self.users_by_id.get(user_id)
@@ -85,19 +89,40 @@ class MessagesRepo:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
             f.flush(); os.fsync(f.fileno())
         self._messages.append(m)
+        if m.is_group_message:
+            logger.info(f"New group message saved: {m.message_id} from {m.from_user_id} to group {m.to_user_id}")
+        else:
+            logger.info(f"New direct message saved: {m.message_id} from {m.from_user_id} to {m.to_user_id}")
 
-    def get_undelivered_messages(self, user_id: str) -> list[Message]:
-        """Get all undelivered messages for a user"""
+    def get_undelivered_messages(self, user_id: str, groups_repo=None) -> list[Message]:
+        """Get all undelivered messages for a user
+        
+        Args:
+            user_id (str): The ID of the user to get undelivered messages for
+            groups_repo (GroupsRepo, optional): Repository for checking group membership
+        """
         undelivered = []
         for msg in self._messages:
             if msg.is_group_message:
-                # For group messages, check if user is in the group and hasn't received the message
-                if msg.to_user_id.startswith('#') and user_id not in msg.delivered_to:
+                # For group messages, check if:
+                # 1. Message is from a group (#)
+                # 2. User hasn't received it yet
+                # 3. User is a member of the group (if groups_repo is provided)
+                if (msg.to_user_id.startswith('#') and 
+                    user_id not in msg.delivered_to and
+                    (groups_repo is None or groups_repo.is_member(msg.to_user_id, user_id))):
                     undelivered.append(msg)
             else:
-                # For DMs, check if message is for this user and hasn't been delivered
+                # For DMs, check if:
+                # 1. Message is for this user
+                # 2. User hasn't received it yet
                 if msg.to_user_id == user_id and user_id not in msg.delivered_to:
                     undelivered.append(msg)
+        
+        if undelivered:
+            logger.info(f"Found {len(undelivered)} undelivered messages for user {user_id}")
+            logger.debug(f"Message types - DM: {sum(1 for m in undelivered if not m.is_group_message)}, " +
+                        f"Group: {sum(1 for m in undelivered if m.is_group_message)}")
         return undelivered
 
     def mark_delivered(self, message_id: str, user_id: str):
@@ -106,6 +131,7 @@ class MessagesRepo:
         for msg in self._messages:
             if msg.message_id == message_id:
                 msg.delivered_to.add(user_id)
+                logger.info(f"Message {message_id} marked as delivered to user {user_id}")
                 break
 
         # Rewrite the entire file
@@ -183,6 +209,7 @@ class GroupsRepo:
     def create_group(self, name: str, creator_id: str, created_ts: int) -> Group:
         """Create a new group"""
         if name in self.groups_by_name:
+            logger.warning(f"Attempt to create existing group: {name}")
             raise ValueError(f"Group {name} already exists")
         
         group = Group(
@@ -193,19 +220,23 @@ class GroupsRepo:
         )
         self.groups_by_name[name] = group
         self._save_group(group)
+        logger.info(f"New group created: {name} by user {creator_id}")
         return group
 
     def add_member(self, group_name: str, user_id: str) -> bool:
         """Add a member to a group. Returns True if user was added, False if already a member"""
         group = self.groups_by_name.get(group_name)
         if not group:
+            logger.warning(f"Attempt to join non-existent group: {group_name}")
             raise ValueError(f"Group {group_name} does not exist")
         
         if user_id in group.member_ids:
+            logger.debug(f"User {user_id} already in group {group_name}")
             return False
 
         # Update in memory
         group.member_ids.add(user_id)
+        logger.info(f"Added user {user_id} to group {group_name}")
         
         # Rewrite the file with updated group
         # This is not efficient for large files but works for this demo
@@ -220,6 +251,7 @@ class GroupsRepo:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
             f.flush()
             os.fsync(f.fileno())
+        logger.debug(f"Updated group {group_name} in storage")
         
         return True
 
