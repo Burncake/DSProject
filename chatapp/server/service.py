@@ -30,7 +30,28 @@ logger.addHandler(console_handler)
 logger.addHandler(file_handler)
 
 class ChatService(chat_pb2_grpc.ChatServiceServicer):
+    """gRPC service implementation for chat functionality.
+    
+    Handles user registration, messaging, group management and real-time
+    message delivery through streaming connections.
+    """
+    
     def __init__(self, users_repo: UsersRepo, messages_repo: MessagesRepo, groups_repo: GroupsRepo, hub: Hub):
+        """Initialize chat service with required repositories and message hub.
+        
+        Args:
+            users_repo (UsersRepo): Repository for user management
+            messages_repo (MessagesRepo): Repository for message storage
+            groups_repo (GroupsRepo): Repository for group management
+            hub (Hub): Real-time message delivery hub
+            
+        Attributes:
+            users: User repository instance
+            messages: Message repository instance
+            groups: Group repository instance
+            hub: Message hub instance
+            groups_lock: Lock for thread-safe group operations
+        """
         self.users = users_repo
         self.messages = messages_repo
         self.groups = groups_repo
@@ -38,6 +59,22 @@ class ChatService(chat_pb2_grpc.ChatServiceServicer):
         self.groups_lock = asyncio.Lock()
 
     async def RegisterUser(self, request: chat_pb2.RegisterRequest, context: aio.ServicerContext):
+        """Register a new user in the chat system.
+        
+        Args:
+            request (RegisterRequest): Contains desired display_name
+            context (ServicerContext): gRPC service context
+            
+        Returns:
+            RegisterResponse: Contains assigned user_id on success
+            
+        Raises:
+            ALREADY_EXISTS: If display_name is already taken
+            
+        Side Effects:
+            - Creates new user in repository
+            - Logs registration attempt and result
+        """
         # Check if user already exists
         existing_user = self.users.find_by_display_name(request.display_name)
         if existing_user:
@@ -51,6 +88,20 @@ class ChatService(chat_pb2_grpc.ChatServiceServicer):
         return chat_pb2.RegisterResponse(user_id=user_id)
         
     async def LoginUser(self, request: chat_pb2.LoginRequest, context: aio.ServicerContext):
+        """Authenticate a user by display name.
+        
+        Args:
+            request (LoginRequest): Contains user's display_name
+            context (ServicerContext): gRPC service context
+            
+        Returns:
+            LoginResponse: Contains success status, user_id if successful,
+                         or error message if failed
+            
+        Note:
+            This is a simple implementation that only verifies the display
+            name exists. A production system would use proper authentication.
+        """
         user = self.users.find_by_display_name(request.display_name)
         if not user:
             return chat_pb2.LoginResponse(
@@ -64,7 +115,22 @@ class ChatService(chat_pb2_grpc.ChatServiceServicer):
         )
 
     async def SearchUsers(self, request, context):
-        # stub for now — returns everyone whose display_name contains query (case-insensitive)
+        """Search for users by display name.
+        
+        Performs a case-insensitive substring search on user display names.
+        
+        Args:
+            request (SearchUsersRequest): Contains search query
+            context (ServicerContext): gRPC service context
+            
+        Returns:
+            SearchUsersResponse: List of matching users with their IDs
+                               and display names
+            
+        Note:
+            Current implementation is a simple substring search.
+            Could be enhanced with more sophisticated search in future.
+        """
         q = (request.query or "").lower()
         matched = []
         for u in self.users.users_by_id.values():
@@ -73,6 +139,24 @@ class ChatService(chat_pb2_grpc.ChatServiceServicer):
         return chat_pb2.SearchUsersResponse(users=matched)
 
     async def CreateGroup(self, request: chat_pb2.CreateGroupRequest, context: aio.ServicerContext):
+        """Create a new chat group.
+        
+        Args:
+            request (CreateGroupRequest): Contains group_name and creator_user_id
+            context (ServicerContext): gRPC service context
+            
+        Returns:
+            CreateGroupResponse: Contains success status and error message if failed
+            
+        Notes:
+            - Group names must start with '#'
+            - Creator is automatically added as first member
+            - Group creation is protected by lock for thread safety
+            
+        Side Effects:
+            - Creates new group in repository if successful
+            - Logs creation attempt and result
+        """
         group_name = request.group_name
         creator_id = request.creator_user_id
 
@@ -102,6 +186,23 @@ class ChatService(chat_pb2_grpc.ChatServiceServicer):
             )
 
     async def JoinGroup(self, request: chat_pb2.JoinGroupRequest, context: aio.ServicerContext):
+        """Add a user to an existing group.
+        
+        Args:
+            request (JoinGroupRequest): Contains group_name and user_id
+            context (ServicerContext): gRPC service context
+            
+        Returns:
+            JoinGroupResponse: Contains success status and error message if failed
+            
+        Notes:
+            - Checks if group exists
+            - Verifies user is not already a member
+            - Protected by lock for thread safety
+            
+        Side Effects:
+            - Updates group membership in repository if successful
+        """
         group_name = request.group_name
         user_id = request.user_id
 
@@ -129,14 +230,32 @@ class ChatService(chat_pb2_grpc.ChatServiceServicer):
             )
 
     async def ListGroups(self, request: chat_pb2.ListGroupsRequest, context: aio.ServicerContext):
-        """Return all groups"""
+        """List all existing chat groups.
+        
+        Args:
+            request (ListGroupsRequest): Empty request
+            context (ServicerContext): gRPC service context
+            
+        Returns:
+            ListGroupsResponse: List of all groups with their names
+                              and member IDs
+        """
         groups = []
         for g in self.groups.groups_by_name.values():
             groups.append(chat_pb2.Group(name=g.name, member_ids=list(g.member_ids)))
         return chat_pb2.ListGroupsResponse(groups=groups)
 
     async def ListUserGroups(self, request: chat_pb2.ListUserGroupsRequest, context: aio.ServicerContext):
-        """Return groups that the given user is a member of"""
+        """List all groups that a specific user is a member of.
+        
+        Args:
+            request (ListUserGroupsRequest): Contains user_id
+            context (ServicerContext): gRPC service context
+            
+        Returns:
+            ListUserGroupsResponse: List of groups the user is a member of,
+                                  including group names and member IDs
+        """
         user_id = request.user_id
         groups = []
         for g in self.groups.get_user_groups(user_id):
@@ -144,10 +263,36 @@ class ChatService(chat_pb2_grpc.ChatServiceServicer):
         return chat_pb2.ListUserGroupsResponse(groups=groups)
 
     async def OpenStream(self, request_iterator: AsyncIterable[chat_pb2.ChatEnvelope], context: aio.ServicerContext):
-        """
-        Protocol: client must send a first SYSTEM message with from_user_id set.
-        Server registers a queue for that user and starts forwarding messages from the queue back to the client.
-        Any SEND_* received will be echoed back to the sender for now (to prove streaming works).
+        """Open a bidirectional streaming connection with a client.
+        
+        Establishes a persistent connection for real-time message exchange.
+        Manages message delivery, offline message queuing, and stream lifecycle.
+        
+        Protocol Flow:
+        1. Client sends initial SYSTEM message with from_user_id
+        2. Server registers message queue for the user
+        3. Server delivers any pending offline messages
+        4. Bidirectional streaming begins for real-time messages
+        
+        Args:
+            request_iterator: Stream of incoming messages from client
+            context: gRPC service context
+            
+        Yields:
+            ChatEnvelope: Messages to be delivered to the client
+            
+        Side Effects:
+            - Registers user's message queue in hub
+            - Delivers queued offline messages
+            - Processes incoming messages
+            - Updates message delivery status
+            - Logs connection lifecycle events
+            
+        Notes:
+            - Connection remains active until client disconnects
+            - Handles both direct and group messages
+            - Provides delivery acknowledgments
+            - Ensures proper cleanup on disconnect
         """
         first = await anext(request_iterator)
         if first.type != chat_pb2.SYSTEM or not first.from_user_id:
@@ -189,6 +334,26 @@ class ChatService(chat_pb2_grpc.ChatServiceServicer):
                 print(f"[SERVICE] Delivered offline message {msg.message_id} to {user_id}")
 
         async def reader():
+            """Process incoming messages from the client stream.
+            
+            Handles various message types:
+            - Direct Messages (SEND_DM): Deliver to recipient or queue if offline
+            - Group Messages (SEND_GROUP): Broadcast to all online group members
+            - System Messages: Process control messages
+            
+            For each message:
+            - Assigns unique message ID if not provided
+            - Attempts real-time delivery to online recipients
+            - Stores messages for offline delivery
+            - Sends delivery acknowledgments back to sender
+            - Validates group membership for group messages
+            
+            Side Effects:
+                - Stores messages in repository
+                - Updates message delivery status
+                - Sends acknowledgments via hub
+                - Logs message processing status
+            """
             async for incoming in request_iterator:
                 msg_id = incoming.message_id or uuid.uuid4().hex
                 current_time = int(time.time() * 1000)
@@ -330,7 +495,23 @@ class ChatService(chat_pb2_grpc.ChatServiceServicer):
             logger.info(f"ChatStream: User '{user_id}' disconnected from stream")
 
 async def _merge_streams(writer_async_gen, reader_coro):
-    # Utility: run a background reader while yielding from writer generator.
+    """Merge an async generator with a coroutine running in background.
+    
+    A utility function that allows running a background task (reader)
+    while yielding items from an async generator (writer).
+    
+    Args:
+        writer_async_gen: Async generator producing items to yield
+        reader_coro: Coroutine to run in background
+        
+    Yields:
+        Items from writer_async_gen
+        
+    Side Effects:
+        - Creates background task for reader_coro
+        - Ensures proper cleanup of background task on exit
+        - Suppresses CancelledError during cleanup
+    """
     task = asyncio.create_task(reader_coro)
     try:
         async for item in writer_async_gen:

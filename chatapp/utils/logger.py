@@ -2,6 +2,22 @@ import logging
 import os
 
 def setup_logger(name='chatapp'):
+    """Set up a logger with console and file output.
+    
+    Creates a logger that writes:
+    - INFO and above to console
+    - DEBUG and above to file (logs/server.log)
+    
+    Args:
+        name (str, optional): Logger name. Defaults to 'chatapp'
+        
+    Returns:
+        logging.Logger: Configured logger instance
+        
+    Side Effects:
+        - Creates logs directory if it doesn't exist
+        - Creates/appends to server.log file
+    """
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
 

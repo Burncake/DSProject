@@ -7,6 +7,24 @@ from .repo import UsersRepo, MessagesRepo, GroupsRepo
 from .hub import Hub
 
 async def serve(host="127.0.0.1", port=50051):
+    """Start the chat server.
+    
+    Sets up and runs the gRPC server with chat service implementation.
+    Initializes all required components:
+    - User repository
+    - Message repository
+    - Group repository
+    - Message delivery hub
+    
+    Args:
+        host (str): Hostname to bind server to. Defaults to localhost.
+        port (int): Port number to listen on. Defaults to 50051.
+        
+    Side Effects:
+        - Creates data directories if needed
+        - Starts gRPC server
+        - Logs server startup progress
+    """
     server = aio.server()
     users_repo = UsersRepo("chatapp/data/users.jsonl")
     messages_repo = MessagesRepo("chatapp/data/messages.jsonl")

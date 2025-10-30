@@ -10,7 +10,37 @@ from ..proto import chat_pb2, chat_pb2_grpc
 
 
 class ChatGUI:
+    """Graphical user interface for the chat application.
+    
+    Provides a complete GUI interface for:
+    - User registration and login
+    - Direct messaging between users
+    - Group chat creation and management
+    - Real-time message delivery
+    - Message history viewing
+    
+    The interface uses tkinter for the GUI elements and
+    maintains an async connection to the gRPC chat server.
+    """
+    
     def __init__(self, root):
+        """Initialize the chat GUI application.
+        
+        Args:
+            root: The tkinter root window
+            
+        Attributes:
+            user_id (str): Logged in user's ID
+            display_name (str): User's display name
+            stub: gRPC stub for server communication
+            channel: gRPC channel to server
+            stream_task: Async task for message stream
+            loop: Async event loop for gRPC operations
+            name_cache: Cache of display names to user IDs
+            current_chat: ID/name of active chat (user or group)
+            current_chat_type: Type of active chat ('dm' or 'group')
+            outgoing_queue: Queue for messages to be sent
+        """
         self.root = root
         self.root.title("gRPC Chat Application")
         
@@ -30,7 +60,19 @@ class ChatGUI:
         self.create_login_frame()
         
     def create_login_frame(self):
-        """Create the login screen"""
+        """Create and display the login/registration screen.
+        
+        Creates a form with:
+        - Display name input
+        - Server address input
+        - Login and Register buttons
+        - Status message display
+        
+        Side Effects:
+            - Creates and displays login UI elements
+            - Sets window size to 500x350
+            - Binds Enter key to login function
+        """
         self.root.geometry("500x350")
         self.login_frame = ttk.Frame(self.root, padding="20")
         self.login_frame.pack(fill=tk.BOTH, expand=True)
@@ -68,7 +110,22 @@ class ChatGUI:
         self.name_entry.bind('<Return>', lambda e: self.login())
         
     def create_chat_frame(self):
-        """Create the main chat interface"""
+        """Create and display the main chat interface.
+        
+        Creates a complex UI with:
+        - Top bar showing user info and logout button
+        - Left sidebar with user and group tabs
+        - User search functionality
+        - Group management (create/join)
+        - Chat display area with message history
+        - Message input area
+        
+        Side Effects:
+            - Creates all main chat UI elements
+            - Sets window size to 900x700
+            - Configures message display styles
+            - Disables send button until chat selected
+        """
         self.root.geometry("900x700")
         self.chat_frame = ttk.Frame(self.root)
         self.chat_frame.pack(fill=tk.BOTH, expand=True)
@@ -159,7 +216,17 @@ class ChatGUI:
         self.send_button.config(state=tk.DISABLED)
         
     def login(self):
-        """Handle login"""
+        """Handle user login request.
+        
+        Validates input and initiates async login process.
+        Uses the display name to authenticate with server.
+        
+        Side Effects:
+            - Updates login status display
+            - Starts background thread for async login
+            - On success: switches to chat interface
+            - On failure: displays error message
+        """
         display_name = self.name_entry.get().strip()
         server = self.host_entry.get().strip()
         
@@ -176,7 +243,17 @@ class ChatGUI:
         thread.start()
         
     def register(self):
-        """Handle registration"""
+        """Handle new user registration request.
+        
+        Validates input and initiates async registration process.
+        Creates new user account on the server.
+        
+        Side Effects:
+            - Updates registration status display
+            - Starts background thread for async registration
+            - On success: switches to chat interface
+            - On failure: displays error message
+        """
         display_name = self.name_entry.get().strip()
         server = self.host_entry.get().strip()
         
@@ -193,7 +270,23 @@ class ChatGUI:
         thread.start()
         
     def _login_async(self, display_name, server, register):
-        """Async login/register logic"""
+        """Perform asynchronous login/registration operations.
+        
+        Sets up async environment and performs server communication
+        for login or registration. Establishes message stream on success.
+        
+        Args:
+            display_name (str): User's chosen display name
+            server (str): Server address (host:port)
+            register (bool): True for registration, False for login
+            
+        Side Effects:
+            - Creates new event loop in background thread
+            - Establishes gRPC channel
+            - Creates message queue
+            - Starts message stream task
+            - Updates UI based on server response
+        """
         try:
             # Create new event loop for this thread
             self.loop = asyncio.new_event_loop()
@@ -243,14 +336,39 @@ class ChatGUI:
                 text=f"Error: {str(e)}", foreground="red"))
             
     def _switch_to_chat(self):
-        """Switch from login to chat interface"""
+        """Switch from login screen to main chat interface.
+        
+        Called after successful login/registration.
+        Initializes main chat UI and loads initial data.
+        
+        Side Effects:
+            - Destroys login frame
+            - Creates main chat interface
+            - Loads user list and groups
+            - Sets up chat functionality
+        """
         self.login_frame.destroy()
         self.create_chat_frame()
         self.search_users()  # Load initial user list
         self.load_user_groups()  # Load user's groups
         
     async def _message_stream(self):
-        """Handle bidirectional message stream"""
+        """Manage bidirectional gRPC message stream with server.
+        
+        Handles:
+        - Initial connection setup
+        - Outgoing message delivery
+        - Incoming message processing
+        - Connection error handling
+        
+        The stream maintains a persistent connection for real-time
+        message delivery in both directions.
+        
+        Side Effects:
+            - Processes messages from outgoing queue
+            - Updates UI with incoming messages
+            - Displays connection status messages
+        """
         async def outgoing():
             # Send initial SYSTEM message
             yield chat_pb2.ChatEnvelope(
@@ -279,7 +397,21 @@ class ChatGUI:
             self.root.after(0, lambda: self._display_system_message(f"Connection error: {str(e)}"))
             
     def _handle_incoming_message(self, envelope):
-        """Handle incoming message from stream"""
+        """Process incoming message from the server stream.
+        
+        Handles different message types:
+        - SEND_DM: Direct messages from other users
+        - SEND_GROUP: Messages in group chats
+        - ACK: Delivery acknowledgments
+        
+        Args:
+            envelope (ChatEnvelope): Protobuf message from server
+            
+        Side Effects:
+            - Updates chat display with new messages
+            - Shows acknowledgment messages
+            - Resolves sender names from IDs
+        """
         if envelope.type == chat_pb2.SEND_DM:
             # Direct message received
             sender_name = self._get_user_name(envelope.from_user_id)
@@ -553,7 +685,18 @@ class ChatGUI:
             asyncio.run_coroutine_threadsafe(_send(), self.loop)
             
     def _display_sent_message(self, text, timestamp):
-        """Display a sent message in the chat area"""
+        """Display a message sent by the current user.
+        
+        Args:
+            text (str): Message content
+            timestamp (int): Unix timestamp in milliseconds
+            
+        Side Effects:
+            - Adds formatted message to chat display
+            - Shows timestamp and "You:" prefix
+            - Uses "sent" text style (blue color)
+            - Scrolls display to show new message
+        """
         self.chat_display.config(state=tk.NORMAL)
         
         time_str = time.strftime('%H:%M:%S', time.localtime(timestamp / 1000))
@@ -565,7 +708,23 @@ class ChatGUI:
         self.chat_display.config(state=tk.DISABLED)
         
     def _display_received_message(self, sender, text, timestamp, msg_type, chat_id):
-        """Display a received message in the chat area"""
+        """Display a message received from another user.
+        
+        Only shows message if it belongs to the currently active chat.
+        
+        Args:
+            sender (str): Display name of message sender
+            text (str): Message content
+            timestamp (int): Unix timestamp in milliseconds
+            msg_type (str): Type of message ('dm' or 'group')
+            chat_id (str): ID of sender or group name
+            
+        Side Effects:
+            - Adds formatted message to chat display if relevant
+            - Shows timestamp and sender name
+            - Uses "received" text style (green color)
+            - Scrolls display to show new message
+        """
         # Only display if it's for the current chat
         if (msg_type == 'dm' and self.current_chat == chat_id and self.current_chat_type == 'dm') or \
            (msg_type == 'group' and self.current_chat == chat_id and self.current_chat_type == 'group'):
@@ -593,14 +752,39 @@ class ChatGUI:
         self.chat_display.config(state=tk.DISABLED)
             
     def _display_system_message(self, text):
-        """Display a system message"""
+        """Display a system or status message.
+        
+        Used for showing status updates, errors, and other
+        system-generated messages.
+        
+        Args:
+            text (str): Message to display
+            
+        Side Effects:
+            - Adds message to chat display
+            - Uses "system" text style (gray, italic)
+            - Scrolls display to show new message
+        """
         self.chat_display.config(state=tk.NORMAL)
         self.chat_display.insert(tk.END, f"{text}\n", "system")
         self.chat_display.see(tk.END)
         self.chat_display.config(state=tk.DISABLED)
         
     def logout(self):
-        """Handle logout"""
+        """Handle user logout request.
+        
+        Cleans up current session and returns to login screen:
+        - Cancels message stream
+        - Closes gRPC channel
+        - Resets all state variables
+        - Switches back to login UI
+        
+        Side Effects:
+            - Stops message processing
+            - Closes server connection
+            - Clears user session data
+            - Returns to login screen
+        """
         if self.loop:
             if self.stream_task:
                 self.loop.call_soon_threadsafe(self.stream_task.cancel)
@@ -622,7 +806,18 @@ class ChatGUI:
         self.create_login_frame()
         
     def on_closing(self):
-        """Handle window closing"""
+        """Handle application window closing.
+        
+        Ensures clean shutdown:
+        - Cancels any running message stream
+        - Stops the async event loop
+        - Closes the main window
+        
+        Side Effects:
+            - Stops all async operations
+            - Closes application window
+            - Ends program execution
+        """
         if self.loop:
             if self.stream_task:
                 self.loop.call_soon_threadsafe(self.stream_task.cancel)
@@ -631,6 +826,18 @@ class ChatGUI:
 
 
 def main():
+    """Start the chat application GUI.
+    
+    Creates main window and initializes chat application:
+    - Creates Tkinter root window
+    - Initializes ChatGUI instance
+    - Sets up window close handler
+    - Starts Tkinter main event loop
+    
+    Side Effects:
+        - Opens application window
+        - Runs GUI event loop
+    """
     root = tk.Tk()
     app = ChatGUI(root)
     root.protocol("WM_DELETE_WINDOW", app.on_closing)

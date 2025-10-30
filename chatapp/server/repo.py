@@ -6,13 +6,29 @@ from ..utils.logger import setup_logger
 logger = setup_logger('chatapp.repo')
 
 class UsersRepo:
+    """Repository for managing user data in JSONL format."""
+    
     def __init__(self, path: str):
+        """Initialize users repository.
+        
+        Args:
+            path (str): Path to JSONL file storing user data
+            
+        Side Effects:
+            - Creates directory structure if not exists
+            - Loads existing users from file
+        """
         os.makedirs(os.path.dirname(path), exist_ok=True)
         self.path = path
         self.users_by_id: Dict[str, User] = {}
         self._load()
 
     def _load(self):
+        """Load users from JSONL file into memory.
+        
+        Side Effects:
+            - Populates users_by_id dictionary
+        """
         if not os.path.exists(self.path): return
         with open(self.path, "r", encoding="utf-8") as f:
             for line in f:
@@ -21,6 +37,16 @@ class UsersRepo:
                 self.users_by_id[rec["id"]] = User(**rec)
 
     def append_user(self, user: User):
+        """Add new user to repository.
+        
+        Args:
+            user (User): User object to store
+            
+        Side Effects:
+            - Appends user to JSONL file
+            - Updates in-memory dictionary
+            - Logs user registration
+        """
         line = json.dumps({"id": user.id, "display_name": user.display_name}, ensure_ascii=False)
         with open(self.path, "a", encoding="utf-8") as f:
             f.write(line + "\n"); f.flush(); os.fsync(f.fileno())
@@ -28,13 +54,33 @@ class UsersRepo:
         logger.info(f"New user registered: {user.display_name} (ID: {user.id})")
 
     def get(self, user_id: str) -> Optional[User]:
+        """Get user by ID.
+        
+        Args:
+            user_id (str): User's unique identifier
+            
+        Returns:
+            Optional[User]: User object if found, None otherwise
+        """
         return self.users_by_id.get(user_id)
 
     def all(self) -> Iterable[User]:
+        """Get all users.
+        
+        Returns:
+            Iterable[User]: Iterator of all user objects
+        """
         return self.users_by_id.values()
         
     def find_by_display_name(self, display_name: str) -> Optional[User]:
-        """Find a user by their display name (case sensitive)"""
+        """Find user by display name (case sensitive).
+        
+        Args:
+            display_name (str): User's display name to search for
+            
+        Returns:
+            Optional[User]: User object if found, None otherwise
+        """
         for user in self.users_by_id.values():
             if user.display_name == display_name:
                 return user
@@ -42,14 +88,34 @@ class UsersRepo:
 
 
 class MessagesRepo:
+    """Repository for managing message data with delivery tracking."""
+    
     def __init__(self, path: str):
+        """Initialize messages repository.
+        
+        Args:
+            path (str): Path to JSONL file storing message data
+            
+        Side Effects:
+            - Creates directory structure if not exists
+            - Loads existing messages from file
+        """
         os.makedirs(os.path.dirname(path), exist_ok=True)
         self.path = path
         self._messages = []
         self._load()
 
     def _load(self):
-        """Load all messages from file"""
+        """Load messages from JSONL file with backward compatibility support.
+        
+        Handles:
+            - Old format with boolean 'delivered' field
+            - New format with 'delivered_to' set
+            - Missing 'is_group_message' field
+            
+        Side Effects:
+            - Populates _messages list with normalized Message objects
+        """
         if not os.path.exists(self.path):
             return
         with open(self.path, "r", encoding="utf-8") as f:
@@ -59,23 +125,31 @@ class MessagesRepo:
                 rec = json.loads(line)
                 # Handle both old 'delivered' and new 'delivered_to' fields
                 if "delivered" in rec:
-                    # Convert old boolean delivered to set
                     delivered_to = set() if not rec["delivered"] else {rec["to_user_id"]}
                     del rec["delivered"]
                     rec["delivered_to"] = delivered_to
                 elif "delivered_to" in rec:
-                    # Convert delivered_to from list to set
                     rec["delivered_to"] = set(rec["delivered_to"])
                 else:
                     rec["delivered_to"] = set()
                     
-                # Add is_group_message field if not present (for backwards compatibility)
+                # Add is_group_message field if not present
                 if "is_group_message" not in rec:
                     rec["is_group_message"] = rec["to_user_id"].startswith("#")
                     
                 self._messages.append(Message(**rec))
 
     def append(self, m: Message):
+        """Append new message to repository.
+        
+        Args:
+            m (Message): Message object to store
+            
+        Side Effects:
+            - Appends message to JSONL file
+            - Updates in-memory message list
+            - Logs message storage with type (DM/group)
+        """
         rec = {
             "message_id": m.message_id,
             "from_user_id": m.from_user_id,
@@ -95,11 +169,20 @@ class MessagesRepo:
             logger.info(f"New direct message saved: {m.message_id} from {m.from_user_id} to {m.to_user_id}")
 
     def get_undelivered_messages(self, user_id: str, groups_repo=None) -> list[Message]:
-        """Get all undelivered messages for a user
+        """Get all undelivered messages for a user.
+        
+        Retrieves both direct messages and group messages, checking group
+        membership when groups_repo is provided.
         
         Args:
-            user_id (str): The ID of the user to get undelivered messages for
-            groups_repo (GroupsRepo, optional): Repository for checking group membership
+            user_id (str): User's ID to get messages for
+            groups_repo (GroupsRepo, optional): Repository to verify group membership
+            
+        Returns:
+            list[Message]: List of undelivered messages for the user
+            
+        Side Effects:
+            - Logs count and types of undelivered messages found
         """
         undelivered = []
         for msg in self._messages:
@@ -126,7 +209,17 @@ class MessagesRepo:
         return undelivered
 
     def mark_delivered(self, message_id: str, user_id: str):
-        """Mark a message as delivered to a specific user"""
+        """Mark message as delivered to specific user.
+        
+        Args:
+            message_id (str): ID of message to mark
+            user_id (str): ID of user who received the message
+            
+        Side Effects:
+            - Updates delivered_to set in memory
+            - Rewrites entire messages file
+            - Logs delivery status
+        """
         # Update in memory
         for msg in self._messages:
             if msg.message_id == message_id:
@@ -152,7 +245,17 @@ class MessagesRepo:
             os.fsync(f.fileno())
 
     def get_conversation_messages(self, user_id: str, chat_id: str, is_group: bool, limit: int = 50) -> list[Message]:
-        """Get message history for a conversation"""
+        """Get message history for a conversation.
+        
+        Args:
+            user_id (str): ID of requesting user
+            chat_id (str): ID of other user or group name
+            is_group (bool): True if group chat, False if DM
+            limit (int, optional): Max messages to return. Defaults to 50
+            
+        Returns:
+            list[Message]: List of messages, newest last, up to limit
+        """
         messages = []
         
         if is_group:
@@ -173,14 +276,30 @@ class MessagesRepo:
         return messages[-limit:] if limit > 0 else messages
 
 class GroupsRepo:
+    """Repository for managing chat groups and their memberships."""
+    
     def __init__(self, path: str):
+        """Initialize groups repository.
+        
+        Args:
+            path (str): Path to JSONL file storing group data
+            
+        Side Effects:
+            - Creates directory structure if not exists
+            - Loads existing groups from file
+        """
         os.makedirs(os.path.dirname(path), exist_ok=True)
         self.path = path
         self.groups_by_name: Dict[str, Group] = {}
         self._load()
 
     def _load(self):
-        """Load groups from JSONL file"""
+        """Load groups from JSONL file into memory.
+        
+        Side Effects:
+            - Populates groups_by_name dictionary
+            - Converts member_ids from list to set
+        """
         if not os.path.exists(self.path): 
             return
         with open(self.path, "r", encoding="utf-8") as f:
@@ -193,7 +312,15 @@ class GroupsRepo:
                 self.groups_by_name[rec["name"]] = Group(**rec)
 
     def _save_group(self, group: Group):
-        """Save a single group to file"""
+        """Save single group to JSONL file.
+        
+        Args:
+            group (Group): Group object to save
+            
+        Side Effects:
+            - Appends group data to JSONL file
+            - Converts member_ids set to list for JSON
+        """
         # Convert set to list for JSON serialization
         rec = {
             "name": group.name,
@@ -207,7 +334,24 @@ class GroupsRepo:
             os.fsync(f.fileno())
 
     def create_group(self, name: str, creator_id: str, created_ts: int) -> Group:
-        """Create a new group"""
+        """Create a new chat group.
+        
+        Args:
+            name (str): Unique name for the group
+            creator_id (str): User ID of group creator
+            created_ts (int): Timestamp of group creation
+            
+        Returns:
+            Group: Newly created group object
+            
+        Raises:
+            ValueError: If group with given name already exists
+            
+        Side Effects:
+            - Creates new group in memory
+            - Saves group to JSONL file
+            - Logs group creation
+        """
         if name in self.groups_by_name:
             logger.warning(f"Attempt to create existing group: {name}")
             raise ValueError(f"Group {name} already exists")
@@ -224,7 +368,23 @@ class GroupsRepo:
         return group
 
     def add_member(self, group_name: str, user_id: str) -> bool:
-        """Add a member to a group. Returns True if user was added, False if already a member"""
+        """Add a member to an existing group.
+        
+        Args:
+            group_name (str): Name of group to add member to
+            user_id (str): ID of user to add
+            
+        Returns:
+            bool: True if user was added, False if already a member
+            
+        Raises:
+            ValueError: If group does not exist
+            
+        Side Effects:
+            - Updates group membership in memory
+            - Rewrites groups file with updated membership
+            - Logs member addition
+        """
         group = self.groups_by_name.get(group_name)
         if not group:
             logger.warning(f"Attempt to join non-existent group: {group_name}")
@@ -256,21 +416,50 @@ class GroupsRepo:
         return True
 
     def get_group(self, name: str) -> Optional[Group]:
-        """Get a group by name"""
+        """Get a group by its name.
+        
+        Args:
+            name (str): Name of group to retrieve
+            
+        Returns:
+            Optional[Group]: Group object if found, None otherwise
+        """
         return self.groups_by_name.get(name)
 
     def get_user_groups(self, user_id: str) -> list[Group]:
-        """Get all groups that a user is a member of"""
+        """Get all groups that a user is a member of.
+        
+        Args:
+            user_id (str): ID of user to get groups for
+            
+        Returns:
+            list[Group]: List of groups where user is a member
+        """
         return [
             group for group in self.groups_by_name.values()
             if user_id in group.member_ids
         ]
 
     def exists(self, name: str) -> bool:
-        """Check if a group exists"""
+        """Check if a group exists by name.
+        
+        Args:
+            name (str): Name of group to check
+            
+        Returns:
+            bool: True if group exists, False otherwise
+        """
         return name in self.groups_by_name
 
     def is_member(self, group_name: str, user_id: str) -> bool:
-        """Check if a user is a member of a group"""
+        """Check if a user is a member of a specific group.
+        
+        Args:
+            group_name (str): Name of group to check
+            user_id (str): ID of user to check membership for
+            
+        Returns:
+            bool: True if user is a member, False if not or if group doesn't exist
+        """
         group = self.groups_by_name.get(group_name)
         return group is not None and user_id in group.member_ids

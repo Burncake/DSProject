@@ -6,6 +6,25 @@ from ..proto import chat_pb2, chat_pb2_grpc
 app = typer.Typer(help="Simple gRPC chat client (DMs)")
 
 async def _run(display_name: str, host: str, port: int, register: bool = False):
+    """Main client loop handling connection and chat operations.
+    
+    Connects to chat server and provides interactive CLI interface for:
+    - User registration/login
+    - Direct messaging
+    - Group creation and management
+    - User search
+    
+    Args:
+        display_name (str): User's display name (will prompt if empty)
+        host (str): Chat server hostname
+        port (int): Chat server port
+        register (bool): True to register new user, False to try login first
+        
+    Side Effects:
+        - Connects to gRPC server
+        - Creates user if registration requested
+        - Starts interactive CLI session
+    """
     chan = aio.insecure_channel(f"{host}:{port}")
     stub = chat_pb2_grpc.ChatServiceStub(chan)
 
@@ -57,6 +76,21 @@ async def _run(display_name: str, host: str, port: int, register: bool = False):
     name_cache = {}
 
     async def resolve_name(name: str) -> str | None:
+        """Resolve display name to user ID.
+        
+        Searches for user by display name, with preference for exact matches.
+        Caches successful resolutions for future use.
+        
+        Args:
+            name (str): Display name to resolve
+            
+        Returns:
+            str | None: User ID if found, None if no matching user
+            
+        Side Effects:
+            - Updates name_cache with resolved IDs
+            - Prints feedback about name resolution
+        """
         # query server for substring match; prefer exact display_name
         resp = await stub.SearchUsers(chat_pb2.SearchUsersRequest(query=name))
         exact = [u for u in resp.users if u.display_name == name]
@@ -73,6 +107,25 @@ async def _run(display_name: str, host: str, port: int, register: bool = False):
         return None
 
     async def outgoing():
+        """Generate outgoing chat messages from user input.
+        
+        Implements command processing for:
+        - /search: Find users by display name
+        - /dm: Send direct message to user
+        - /create-group: Create new chat group
+        - /join-group: Join existing group
+        - /group: Send message to group
+        - /list-groups: Show joined groups
+        - /help: Show available commands
+        
+        Yields:
+            ChatEnvelope: Protocol messages for server communication
+            
+        Side Effects:
+            - Reads from standard input
+            - Prints command responses and help text
+            - Updates name cache with resolved user IDs
+        """
         # First SYSTEM identify
         yield chat_pb2.ChatEnvelope(type=chat_pb2.SYSTEM, from_user_id=user_id, sent_ts=int(time.time()*1000))
 
@@ -198,6 +251,20 @@ async def _run(display_name: str, host: str, port: int, register: bool = False):
 
     # Reader: print all incoming (ACKs and DMs)
     async def reader(call):
+        """Process incoming messages from server stream.
+        
+        Handles different message types:
+        - SEND_DM: Direct messages from other users
+        - SEND_GROUP: Messages sent to groups
+        - ACK: Delivery acknowledgments
+        - Other: Debug information
+        
+        Args:
+            call: Active gRPC stream call
+            
+        Side Effects:
+            - Prints formatted messages to console
+        """
         async for env in call:
             if env.type == chat_pb2.SEND_DM:
                 print(f"[DM] from {env.from_user_id}: {env.text}")
