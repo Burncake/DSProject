@@ -262,6 +262,79 @@ class ChatService(chat_pb2_grpc.ChatServiceServicer):
             groups.append(chat_pb2.Group(name=g.name, member_ids=list(g.member_ids)))
         return chat_pb2.ListUserGroupsResponse(groups=groups)
 
+    async def GetUserGroups(self, request: chat_pb2.GetUserGroupsRequest, context: aio.ServicerContext):
+        """Get all groups that a user is a member of.
+        
+        Similar to ListUserGroups but uses a different protobuf message format
+        for compatibility with the GUI client.
+        
+        Args:
+            request (GetUserGroupsRequest): Contains user_id
+            context (ServicerContext): gRPC service context
+            
+        Returns:
+            GetUserGroupsResponse: List of groups the user is a member of
+        """
+        user_id = request.user_id
+        groups = []
+        for g in self.groups.get_user_groups(user_id):
+            groups.append(chat_pb2.Group(name=g.name, member_ids=list(g.member_ids)))
+        logger.info(f"GetUserGroups: Retrieved {len(groups)} groups for user {user_id}")
+        return chat_pb2.GetUserGroupsResponse(groups=groups)
+
+    async def GetMessages(self, request: chat_pb2.GetMessagesRequest, context: aio.ServicerContext):
+        """Get message history for a conversation.
+        
+        Retrieves recent messages for either a direct message conversation
+        or a group chat.
+        
+        Args:
+            request (GetMessagesRequest): Contains:
+                - user_id: ID of requesting user
+                - chat_id: ID of other user or group name
+                - is_group: True if group chat, False if DM
+                - limit: Max messages to return
+            context (ServicerContext): gRPC service context
+            
+        Returns:
+            GetMessagesResponse: List of messages in chronological order
+            
+        Side Effects:
+            - Logs message history retrieval
+        """
+        messages = self.messages.get_conversation_messages(
+            user_id=request.user_id,
+            chat_id=request.chat_id,
+            is_group=request.is_group,
+            limit=request.limit or 50
+        )
+
+        # Convert Message objects to ChatEnvelopes
+        envelopes = []
+        for msg in messages:
+            if msg.is_group_message:
+                envelope = chat_pb2.ChatEnvelope(
+                    type=chat_pb2.SEND_GROUP,
+                    from_user_id=msg.from_user_id,
+                    group_id=msg.to_user_id,
+                    message_id=msg.message_id,
+                    text=msg.text,
+                    sent_ts=msg.sent_ts
+                )
+            else:
+                envelope = chat_pb2.ChatEnvelope(
+                    type=chat_pb2.SEND_DM,
+                    from_user_id=msg.from_user_id,
+                    to_user_id=msg.to_user_id,
+                    message_id=msg.message_id,
+                    text=msg.text,
+                    sent_ts=msg.sent_ts
+                )
+            envelopes.append(envelope)
+
+        logger.info(f"GetMessages: Retrieved {len(envelopes)} messages for conversation between {request.user_id} and {request.chat_id}")
+        return chat_pb2.GetMessagesResponse(messages=envelopes)
+
     async def OpenStream(self, request_iterator: AsyncIterable[chat_pb2.ChatEnvelope], context: aio.ServicerContext):
         """Open a bidirectional streaming connection with a client.
         
